@@ -121,21 +121,28 @@ mkdir -p ~/Library/Logs
 launchctl load ~/Library/LaunchAgents/com.cursor.cursor-agent-worker.plist
 ```
 
-### Windows (Task Scheduler)
+### Windows (nssm service)
 
-Open PowerShell as your normal user and run:
+A Windows service is the cleanest way to run the worker with no visible window. We use [nssm](https://nssm.cc/) to wrap `powershell.exe` launching the worker via a hidden-launcher script.
+
+1. Download [nssm](https://nssm.cc/) and extract it to `%USERPROFILE%\nssm` so the binary is at `%USERPROFILE%\nssm\nssm-2.24-101-g897c7ad\win64\nssm.exe` (or adjust the script path).
+
+2. Open an **elevated PowerShell** in the `windows` directory of this repo and run:
 
 ```powershell
-$exe = Join-Path $env:LOCALAPPDATA "cursor-agent\cursor-agent.exe"
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -Command & `"$exe`" worker start" -WorkingDirectory $env:USERPROFILE
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
-$settings = New-ScheduledTaskSettingsSet -AllowStartOnDemand -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-Register-ScheduledTask -TaskName "Cursor Agent Worker" -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force
-Start-ScheduledTask -TaskName "Cursor Agent Worker"
+& .\install-service.ps1
 ```
 
-Check Task Scheduler for status.
+It will copy `worker-hidden.ps1` next to the `cursor-agent` installation, install `CursorAgentWorker` as a service under your Windows account, and start it.
+
+3. Verify the worker is running:
+
+```powershell
+Get-Service CursorAgentWorker
+Get-NetTCPConnection -OwningProcess (Get-Process -Name node | Where-Object Path -like '*cursor-agent*versions*' | Select-Object -First 1).Id
+```
+
+You should see the service `Running` and an established outbound connection on port 443.
 
 ## 5. Access the worker
 
@@ -166,7 +173,9 @@ launchctl load ~/Library/LaunchAgents/com.cursor.cursor-agent-worker.plist
 
 Windows:
 
-Use Task Scheduler to restart the task.
+```powershell
+& "$env:USERPROFILE\nssm\nssm-2.24-101-g897c7ad\win64\nssm.exe" restart CursorAgentWorker
+```
 
 ## Notes
 
